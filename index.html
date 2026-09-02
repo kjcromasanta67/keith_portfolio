@@ -389,6 +389,10 @@
             margin-bottom: 20px;
         }
 
+        .submit-section b {
+            color: #66785f;
+        }
+
         .upload-form {
             display: flex;
 
@@ -723,13 +727,7 @@
         <div class="activities" id="quizActivities"></div>
         <div class="submit-section">
             <h2>Add a Quiz Activity</h2>
-            <p>Choose a picture of your completed quiz, enter its name, and add it to your portfolio.</p>
-            <form class="upload-form" onsubmit="addActivity(event, 'quiz')">
-                <input type="text" id="quizName" placeholder="Quiz name" required>
-                <input type="file" id="quizFile" accept="image/*" required>
-                <button type="submit" class="submit-button">ADD QUIZ</button>
-                <img src = "quiz1.png.">
-            </form>
+            <p>Put your quiz image or PDF inside the <b>activities</b> folder, then add it to the ACTIVITIES list in the code.</p>
         </div>
     </div>
 </section>
@@ -751,12 +749,7 @@
 
         <div class="submit-section">
             <h2>Add a Laboratory Activity</h2>
-            <p>Choose a picture of your completed laboratory activity.</p>
-            <form class="upload-form" onsubmit="addActivity(event, 'laboratory')">
-                <input type="text" id="laboratoryName" placeholder="Laboratory name" required>
-                <input type="file" id="laboratoryFile" accept="image/*" required>
-                <button type="submit" class="submit-button">ADD LABORATORY</button>
-            </form>
+            <p>Put your laboratory image or PDF inside the <b>activities</b> folder, then add it to the ACTIVITIES list in the code.</p>
         </div>
     </div>
 </section>
@@ -778,12 +771,7 @@
 
         <div class="submit-section">
             <h2>Add an Examination</h2>
-            <p>Choose a picture of your completed examination.</p>
-            <form class="upload-form" onsubmit="addActivity(event, 'exam')">
-                <input type="text" id="examName" placeholder="Exam name" required>
-                <input type="file" id="examFile" accept="image/*" required>
-                <button type="submit" class="submit-button">ADD EXAM</button>
-            </form>
+            <p>Put your examination image or PDF inside the <b>activities</b> folder, then add it to the ACTIVITIES list in the code.</p>
         </div>
     </div>
 </section>
@@ -825,180 +813,35 @@
         }
 
         /* =========================
-           STORAGE (IndexedDB)
+           FILE-BASED ACTIVITIES
            ---------------------------------
-           Photos are stored as base64 image data, and a handful of them
-           can easily blow past localStorage's ~5-10MB limit, which makes
-           saves fail silently (no error, but nothing actually gets kept).
-           IndexedDB has a much larger quota and is built for this, so
-           activities (including their images) are stored there instead.
+           No database is used.
+           Put your activity files inside the "activities" folder
+           and add them to the lists below.
         ========================= */
 
-        let dbPromise = null;
-
-        function openActivityDB() {
-            if (dbPromise) return dbPromise;
-
-            dbPromise = new Promise(function(resolve, reject) {
-                const request = indexedDB.open("PortfolioDB", 1);
-
-                request.onupgradeneeded = function(e) {
-                    const db = e.target.result;
-                    if (!db.objectStoreNames.contains("activities")) {
-                        db.createObjectStore("activities", { keyPath: "id" });
-                    }
-                };
-
-                request.onsuccess = function(e) {
-                    resolve(e.target.result);
-                };
-
-                request.onerror = function(e) {
-                    reject(e.target.error);
-                };
-            });
-
-            return dbPromise;
-        }
-
-        function dbGetAll() {
-            return openActivityDB().then(function(db) {
-                return new Promise(function(resolve, reject) {
-                    const tx = db.transaction("activities", "readonly");
-                    const store = tx.objectStore("activities");
-                    const req = store.getAll();
-                    req.onsuccess = function() { resolve(req.result || []); };
-                    req.onerror = function() { reject(req.error); };
-                });
-            });
-        }
-
-        function dbPut(activity) {
-            return openActivityDB().then(function(db) {
-                return new Promise(function(resolve, reject) {
-                    const tx = db.transaction("activities", "readwrite");
-                    tx.objectStore("activities").put(activity);
-                    tx.oncomplete = function() { resolve(); };
-                    tx.onerror = function() { reject(tx.error); };
-                });
-            });
-        }
-
-        function dbDelete(id) {
-            return openActivityDB().then(function(db) {
-                return new Promise(function(resolve, reject) {
-                    const tx = db.transaction("activities", "readwrite");
-                    tx.objectStore("activities").delete(id);
-                    tx.oncomplete = function() { resolve(); };
-                    tx.onerror = function() { reject(tx.error); };
-                });
-            });
-        }
-
-        // Shrinks an image before saving so it takes up less storage space
-        // and loads faster (long side capped at 1200px, exported as JPEG).
-        function compressImage(dataUrl) {
-            return new Promise(function(resolve, reject) {
-                const img = new Image();
-                img.onload = function() {
-                    const maxSide = 1200;
-                    let width = img.width;
-                    let height = img.height;
-
-                    if (width > maxSide || height > maxSide) {
-                        if (width > height) {
-                            height = Math.round(height * (maxSide / width));
-                            width = maxSide;
-                        } else {
-                            width = Math.round(width * (maxSide / height));
-                            height = maxSide;
-                        }
-                    }
-
-                    const canvas = document.createElement("canvas");
-                    canvas.width = width;
-                    canvas.height = height;
-                    const ctx = canvas.getContext("2d");
-                    ctx.drawImage(img, 0, 0, width, height);
-
-                    resolve(canvas.toDataURL("image/jpeg", 0.8));
-                };
-                img.onerror = reject;
-                img.src = dataUrl;
-            });
-        }
-
-        function addActivity(event, type) {
-            event.preventDefault();
-
-            const nameInput = document.getElementById(type + "Name");
-            const fileInput = document.getElementById(type + "File");
-            const name = nameInput.value.trim();
-            const file = fileInput.files[0];
-
-            if (!file) {
-                alert("Please choose a picture first.");
-                return;
-            }
-
-            if (!file.type.startsWith("image/")) {
-                alert("Please select an image file.");
-                return;
-            }
-
-            const reader = new FileReader();
-
-            reader.onload = function(e) {
-                compressImage(e.target.result)
-                    .then(function(compressed) {
-                        return dbPut({
-                            id: Date.now(),
-                            type: type,
-                            name: name,
-                            image: compressed
-                        });
-                    })
-                    .then(function() {
-                        nameInput.value = "";
-                        fileInput.value = "";
-                        return displayActivities();
-                    })
-                    .then(function() {
-                        alert("Activity added successfully!");
-                    })
-                    .catch(function(err) {
-                        console.error(err);
-                        alert(
-                            "Sorry, that activity couldn't be saved (" +
-                            (err && err.message ? err.message : "storage error") +
-                            "). Try a smaller image, or make sure this page " +
-                            "isn't running in a browser's private/incognito mode."
-                        );
-                    });
-            };
-
-            reader.onerror = function() {
-                alert("Sorry, that file couldn't be read. Please try again.");
-            };
-
-            reader.readAsDataURL(file);
-        }
-
-        // Fixed files that live in the same folder as this page. These
-        // always show up alongside whatever gets uploaded through the
-        // forms below — they aren't stored in IndexedDB and can't be
-        // deleted from the page, since they're actual files on disk.
-        const STATIC_ACTIVITIES = {
+        // Files must be placed in the "activities" folder.
+        // Supported: images (JPG/PNG/etc.) and PDF files.
+        const ACTIVITIES = {
             quiz: [
                 { name: "Quiz 1", kind: "image", src: "quiz1.png" }
+                // Add more here, for example:
+                // { name: "Quiz 2", kind: "pdf", src: "activities/quiz2.pdf" }
             ],
+
             laboratory: [
-                { name: "Romasanta Lab 1", kind: "pdf", src: "Romasanta_Lab1.pdf" }
+                { name: "Laboratory 1", kind: "pdf", src: "Romasanta_lab1.pdf" }
+                , { name: "Laboratory 2", kind: "pdf", src: "Romasanta_Lab2.pdf" }
+                // { name: "Laboratory 2", kind: "image", src: "activities/lab2.jpg" }
             ],
-            exam: []
+
+            exam: [
+                // { name: "Midterm Exam", kind: "image", src: "activities/midterm.jpg" }
+                // { name: "Final Exam", kind: "pdf", src: "activities/final-exam.pdf" }
+            ]
         };
 
-        function buildCard(item, numberLabel, deletable) {
+        function buildCard(item, numberLabel) {
             const card = document.createElement("div");
             card.className = "card";
 
@@ -1025,94 +868,54 @@
 
                 const label = document.createElement("div");
                 label.className = "file-label";
-                label.textContent = "Open " + item.src;
+                label.textContent = "Open " + item.src.split("/").pop();
 
                 link.appendChild(icon);
                 link.appendChild(label);
                 card.appendChild(link);
             } else {
                 const image = document.createElement("img");
-                image.src = item.src || item.image;
+                image.src = item.src;
                 image.className = "activity-image";
                 image.alt = item.name;
                 image.onclick = function() {
-                    openImageViewer(item.src || item.image);
+                    openImageViewer(item.src);
                 };
                 card.appendChild(image);
-            }
-
-            if (deletable) {
-                const deleteButton = document.createElement("button");
-                deleteButton.className = "delete-button";
-                deleteButton.textContent = "DELETE";
-                deleteButton.onclick = function() {
-                    deleteActivity(item.id);
-                };
-                card.appendChild(deleteButton);
             }
 
             return card;
         }
 
         function displayActivities() {
-            return dbGetAll()
-                .then(function(activities) {
-                    const containers = {
-                        quiz: document.getElementById("quizActivities"),
-                        laboratory: document.getElementById("laboratoryActivities"),
-                        exam: document.getElementById("examActivities")
-                    };
+            const containers = {
+                quiz: document.getElementById("quizActivities"),
+                laboratory: document.getElementById("laboratoryActivities"),
+                exam: document.getElementById("examActivities")
+            };
 
-                    Object.keys(containers).forEach(function(type) {
-                        containers[type].innerHTML = "";
+            Object.keys(containers).forEach(function(type) {
+                const container = containers[type];
+                container.innerHTML = "";
 
-                        const staticItems = (STATIC_ACTIVITIES[type] || []).map(function(item) {
-                            return Object.assign({ deletable: false }, item);
-                        });
+                const items = ACTIVITIES[type] || [];
 
-                        const uploadedItems = activities
-                            .filter(function(activity) {
-                                return activity.type === type;
-                            })
-                            .map(function(activity) {
-                                return Object.assign(
-                                    { deletable: true, kind: "image" },
-                                    activity
-                                );
-                            });
+                if (items.length === 0) {
+                    container.innerHTML =
+                        '<p class="empty-message">No activities added yet.</p>';
+                    return;
+                }
 
-                        const combined = staticItems.concat(uploadedItems);
+                items.forEach(function(item, index) {
+                    const numberLabel =
+                        type.toUpperCase() + " " +
+                        String(index + 1).padStart(2, "0");
 
-                        if (combined.length === 0) {
-                            containers[type].innerHTML =
-                                '<p class="empty-message">No activities uploaded yet.</p>';
-                            return;
-                        }
-
-                        combined.forEach(function(item, index) {
-                            const numberLabel =
-                                type.toUpperCase() + " " + String(index + 1).padStart(2, "0");
-                            const card = buildCard(item, numberLabel, item.deletable);
-                            containers[type].appendChild(card);
-                        });
-                    });
-                })
-                .catch(function(err) {
-                    console.error(err);
+                    container.appendChild(
+                        buildCard(item, numberLabel)
+                    );
                 });
-        }
-
-        function deleteActivity(id) {
-            if (!confirm("Delete this activity?")) {
-                return;
-            }
-
-            dbDelete(id)
-                .then(displayActivities)
-                .catch(function(err) {
-                    console.error(err);
-                    alert("Sorry, that couldn't be deleted. Please try again.");
-                });
+            });
         }
 
         function openImageViewer(image) {
